@@ -16,8 +16,27 @@ import json
 import logging
 import os
 import time
+import uuid
 
 from locust import HttpUser, between, task
+
+# Resolve the deployed Agent Runtime from deployment metadata. Agent Engine has
+# no public service URL; it proxies the container's HTTP routes (e.g. /run_sse)
+# under the reasoningEngines ".../api/<route>" passthrough path.
+with open("deployment_metadata.json", encoding="utf-8") as f:
+    remote_agent_runtime_id = json.load(f)["remote_agent_runtime_id"]
+
+# Format: projects/{project_number}/locations/{location}/reasoningEngines/{id}
+parts = remote_agent_runtime_id.split("/")
+project_number = parts[1]
+location = parts[3]
+engine_id = parts[5]
+
+BASE_HOST = f"https://{location}-aiplatform.googleapis.com"
+API_PREFIX = (
+    f"/reasoningEngines/v1/projects/{project_number}"
+    f"/locations/{location}/reasoningEngines/{engine_id}/api"
+)
 
 # Configure logging
 logging.basicConfig(
@@ -25,49 +44,54 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Vertex AI and load agent config
-with open("deployment_metadata.json", encoding="utf-8") as f:
-    remote_agent_runtime_id = json.load(f)["remote_agent_runtime_id"]
-
-parts = remote_agent_runtime_id.split("/")
-project_id = parts[1]
-location = parts[3]
-engine_id = parts[5]
-
-# Convert remote agent engine ID to streaming URL.
-base_url = f"https://{location}-aiplatform.googleapis.com"
-url_path = f"/v1/projects/{project_id}/locations/{location}/reasoningEngines/{engine_id}:streamQuery"
-
-logger.info("Using remote agent engine ID: %s", remote_agent_runtime_id)
-logger.info("Using base URL: %s", base_url)
-logger.info("Using URL path: %s", url_path)
-
 
 class ChatStreamUser(HttpUser):
-    """Simulates a user interacting with the chat stream API."""
+    """Simulates a user interacting with the agent via the ADK /run_sse route."""
 
     wait_time = between(1, 3)  # Wait 1-3 seconds between tasks
-    host = base_url  # Set the base host URL for Locust
+    host = BASE_HOST
 
     @task
     def chat_stream(self) -> None:
-        """Simulates a chat stream interaction."""
+        """Creates a session and streams a chat turn through /run_sse."""
         headers = {"Content-Type": "application/json"}
-        headers["Authorization"] = f"Bearer {os.environ['_AUTH_TOKEN']}"
+        if os.environ.get("_AUTH_TOKEN"):
+            headers["Authorization"] = f"Bearer {os.environ['_AUTH_TOKEN']}"
+
+        # Create session first
+        user_id = f"user_{uuid.uuid4()}"
+        session_response = self.client.post(
+            f"{API_PREFIX}/apps/app/users/{user_id}/sessions",
+            name="/api/apps/.../sessions",
+            headers=headers,
+            json={"state": {"preferred_language": "English", "visit_count": 1}},
+        )
+        if session_response.status_code != 200:
+            session_response.failure(
+                f"Session creation failed: {session_response.status_code}"
+            )
+            return
+        session_id = session_response.json()["id"]
+
+        # Send chat message
         data = {
-            "class_method": "async_stream_query",
-            "input": {
-                "user_id": "test",
-                "message": "Hi!",
+            "app_name": "app",
+            "user_id": user_id,
+            "session_id": session_id,
+            "new_message": {
+                "role": "user",
+                "parts": [{"text": "Hello! Weather in New york?"}],
             },
+            "streaming": True,
         }
         start_time = time.time()
+
         with self.client.post(
-            url_path,
+            f"{API_PREFIX}/run_sse",
+            name="/api/run_sse message",
             headers=headers,
             json=data,
             catch_response=True,
-            name="/streamQuery async_stream_query",
             stream=True,
             params={"alt": "sse"},
         ) as response:
@@ -82,7 +106,7 @@ class ChatStreamUser(HttpUser):
                         if "429 Too Many Requests" in line_str:
                             self.environment.events.request.fire(
                                 request_type="POST",
-                                name=f"{url_path} rate_limited 429s",
+                                name="/api/run_sse rate_limited 429s",
                                 response_time=0,
                                 response_length=len(line),
                                 response=response,
@@ -116,7 +140,7 @@ class ChatStreamUser(HttpUser):
                 if not has_error:
                     self.environment.events.request.fire(
                         request_type="POST",
-                        name="/streamQuery end",
+                        name="/api/run_sse end",
                         response_time=total_time * 1000,  # Convert to milliseconds
                         response_length=len(events),
                         response=response,

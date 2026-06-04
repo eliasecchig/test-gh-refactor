@@ -12,14 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Helpers for attaching A2A endpoints to an existing FastAPI application.
+"""Attach A2A (Agent2Agent) endpoints to the FastAPI app.
 
-This module centralises the boilerplate needed to expose Agent2Agent (A2A)
-endpoints from a scaffolded project. Calling :func:`attach_a2a_routes`
-registers the dynamic agent-card endpoint and the JSON-RPC endpoint on a
-caller-supplied FastAPI app, so the same app can serve both the standard ADK
-web routes and the A2A routes without duplicating the wiring in every
-generated project.
+:func:`attach_a2a_routes` registers the dynamic agent-card endpoint and the
+JSON-RPC endpoint so the same app serves A2A alongside the adk_api routes,
+reachable by A2A clients and Gemini Enterprise A2A registration.
 """
 
 from __future__ import annotations
@@ -73,42 +70,14 @@ async def attach_a2a_routes(
     agent_version: str | None = None,
     app_url: str | None = None,
 ) -> None:
-    """Attach A2A endpoints to an existing FastAPI app.
+    """Register A2A routes (JSON-RPC + agent-card endpoints) under ``rpc_path``.
 
-    Builds a dynamic agent card from ``agent`` and registers the A2A
-    JSON-RPC endpoint, the well-known agent-card endpoint, and the extended
-    agent-card endpoint under ``rpc_path`` on the caller-supplied ``app``.
-
-    Args:
-        app: The FastAPI application the A2A routes should be attached to.
-        agent: The root ADK agent that the agent card is built from.
-        runner: The ADK runner used by the A2A executor. The caller is
-            responsible for constructing this with the desired session,
-            artifact, and memory services so the A2A path observes the
-            same backends as the standard ADK path.
-        task_store: The :class:`a2a.server.tasks.TaskStore` implementation
-            used by the A2A request handler. Pass an
-            :class:`~a2a.server.tasks.InMemoryTaskStore` for local
-            development and a managed/persistent store for production
-            deployments.
-        rpc_path: The path prefix at which the A2A routes are mounted, for
-            example ``"/a2a/my_agent"``. Used for both the JSON-RPC URL
-            and as the prefix for the agent-card URLs.
-        capabilities: Optional override for the A2A capabilities advertised
-            on the agent card. Defaults to streaming + the ADK executor
-            extension.
-        agent_version: Optional explicit version string published on the
-            agent card. Defaults to the ``AGENT_VERSION`` environment
-            variable or ``"0.1.0"``.
-        app_url: Optional explicit public URL the agent is reachable at.
-            Defaults to the ``APP_URL`` environment variable or
-            ``http://0.0.0.0:8000``. The agent card's ``url`` field is set
-            to ``{app_url}{rpc_path}`` per the A2A specification.
-
-    This function is idempotent only with respect to the agent-card build;
-    repeated calls would register duplicate routes on ``app``. Callers
-    should invoke it once per app, typically inside a FastAPI ``lifespan``
-    context manager so the agent card can be built asynchronously.
+    Builds a dynamic agent card from ``agent`` and mounts the routes on ``app``.
+    The ``runner`` should share the session/artifact/memory services with the
+    standard ADK path. ``capabilities``, ``agent_version``, and ``app_url``
+    override their defaults (streaming + ADK extension, ``AGENT_VERSION``,
+    ``APP_URL``). Call once per app — typically in a FastAPI ``lifespan``, since
+    the card is built asynchronously; repeated calls register duplicate routes.
     """
     resolved_app_url = app_url or os.getenv("APP_URL", "http://0.0.0.0:8000")
     resolved_agent_version = agent_version or os.getenv("AGENT_VERSION", "0.1.0")

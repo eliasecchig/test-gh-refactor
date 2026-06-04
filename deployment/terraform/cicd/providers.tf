@@ -18,7 +18,7 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 7.13.0"
+      version = "~> 7.28.0"
     }
     github = {
       source  = "integrations/github"
@@ -34,13 +34,13 @@ terraform {
 provider "google" {
   alias                 = "staging_billing_override"
   billing_project       = var.staging_project_id
-  region = var.region
+  region                = var.region
   user_project_override = true
 }
 
 provider "google" {
   alias                 = "prod_billing_override"
   billing_project       = var.prod_project_id
-  region = var.region
+  region                = var.region
   user_project_override = true
 }

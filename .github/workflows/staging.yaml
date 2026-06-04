@@ -62,8 +62,11 @@ jobs:
         run: uv sync --locked
 
       - name: Deploy to Staging (Agent Runtime)
+        env:
+          AGENTS_CLI_EXPERIMENTS: '{"enable_ae_container_deploy": true}'
         run: |
-          uvx google-agents-cli deploy \
+          gsutil cp gs://asp-test-prd-terraform-state/wheels/google_agents_cli-0.2.0-py3-none-any.whl /tmp/
+          uvx --from /tmp/google_agents_cli-0.2.0-py3-none-any.whl google-agents-cli deploy \
             --project ${{ vars.STAGING_PROJECT_ID }} \
             --region ${{ vars.REGION }} \
             --service-account=${{ vars.APP_SERVICE_ACCOUNT_STAGING }} \

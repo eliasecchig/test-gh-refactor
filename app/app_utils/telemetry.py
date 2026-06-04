@@ -17,7 +17,7 @@ import os
 
 
 def setup_telemetry() -> str | None:
-    """Configure OpenTelemetry and GenAI telemetry with GCS upload."""
+    """Configure GenAI prompt/response logging via OpenTelemetry."""
     os.environ.setdefault("GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", "true")
 
     bucket = os.environ.get("LOGS_BUCKET_NAME")
@@ -50,3 +50,23 @@ def setup_telemetry() -> str | None:
         )
 
     return bucket
+
+
+def setup_agent_engine_telemetry() -> None:
+    """Install the Agent Engine tracer provider (traces/logs to the customer project).
+
+    Tags spans with the reasoningEngine resource. The OTel resource is fixed at
+    provider creation, so this must run before get_fast_api_app to set the tags.
+    No-op unless GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY is set.
+    """
+    if os.environ.get("GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY", "").lower() not in (
+        "true",
+        "1",
+    ):
+        return
+
+    import google.auth
+    from vertexai.agent_engines.templates.adk import _default_instrumentor_builder
+
+    _, project_id = google.auth.default()
+    _default_instrumentor_builder(project_id, enable_tracing=True, enable_logging=True)

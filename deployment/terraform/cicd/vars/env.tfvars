@@ -1,19 +1,7 @@
-# Project name used for resource naming
-project_name = "te3st122aassa"
-
-# Your Production Google Cloud project id
-prod_project_id = "your-production-project-id"
-
-# Your Staging / Test Google Cloud project id
-staging_project_id = "your-staging-project-id"
-
-# Your Google Cloud project ID that will be used to host the Cloud Build pipelines.
-cicd_runner_project_id = "your-cicd-project-id"
-
-repository_owner = "Your GitHub organization or username."
-
-# Name of the repository you added to Cloud Build
-repository_name = "te3st122aassa"
-
-# The Google Cloud region you will use to deploy the infrastructure
+staging_project_id = "asp-test-stg"
+prod_project_id = "asp-test-prd"
+cicd_runner_project_id = "asp-test-prd"
 region = "us-east1"
+repository_name = "test-gh-refactor"
+repository_owner = "eliasecchig"
+create_repository = false
